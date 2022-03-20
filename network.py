@@ -4,8 +4,11 @@ import ssl
 import socket
 import argparse
 from time import sleep
+import time
 from multiprocessing import Process
 from socketserver import BaseRequestHandler, TCPServer
+import hashlib
+from datetime import datetime
 
 parser = argparse.ArgumentParser(description='Basic python networking example')
 parser.add_argument('--alt', action='store_true')
@@ -61,6 +64,7 @@ def tcp_client(port, data):
     try:
         # Establish connection to TCP server and exchange data
         s.connect((host_ip, port))
+        print('TCP connection established with ' + host_ip)
         s.sendall(data.encode())
         # Read data from the TCP server and close the connection
         received = s.recv(1024)
@@ -75,27 +79,49 @@ def tcp_client(port, data):
 #          Broadcast Example          #
 #######################################
 def broadcast_listener(socket):
+    hash = get_bcast_hash()
     try:
         while True:
-            data = socket.recvfrom(512)
-            print("Broadcast received: ", data)
+            data, addr = socket.recvfrom(512)
+            if addr[0] != own_ip:
+                string_rec = data.decode("utf-8")
+                #substrings_rec = string_rec.split()
+                if string_rec == hash:
+                    print("Broadcast received: " + string_rec)
+                    #if int(substrings_rec[1]) >= int(get_current_seconds()) - 5 and int(substrings_rec[1]) <= int(get_current_seconds()):
+                        #print("time validated")
+                    
     except KeyboardInterrupt:
         pass
 
 
 def broadcast_sender(port):
     count = 0
+    hash = get_bcast_hash()
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         while True:
-            msg = 'bcast_test: ' + str(count)
+            #msg = hash + ' ' + get_current_seconds()
+            msg = hash
             count += 1
             s.sendto(msg.encode('ascii'), ('255.255.255.255', port))
             sleep(5)
     except KeyboardInterrupt:
         pass
+######################################
+#          Helper functions          #
+######################################
+def get_bcast_hash():
+    bcast_string = "overlay-network-broadcast"
+    hash = hashlib.sha256(bcast_string.encode('utf-8')).hexdigest()
+    return hash
 
+def get_current_date_time():
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+def get_current_seconds():
+    return str(time.time()).split('.')[0]
 
 #######################################
 #               Driver                #
