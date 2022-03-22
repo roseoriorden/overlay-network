@@ -12,7 +12,8 @@ from datetime import datetime
 
 own_ip = None
 server_ip = None
-
+connected_clients = {}
+client_num = 1
 
 def init_ip():
     global own_ip
@@ -28,10 +29,23 @@ def init_ip():
 class tcp_handler(BaseRequestHandler):
     def handle(self):
         self.data = self.request.recv(1024).strip()
-        print("Echoing message from: {}".format(self.client_address[0]))
+        client_register(self)
         print(self.data)
         self.request.sendall("ACK from server".encode())
 
+def client_register(self):
+    # add new client to dictionary of clients
+    # connected_clients = { IP : host_name }
+    #count = len(connected_clients) + 1
+    global client_num
+    client_name = "client" + str(client_num) + ".c6610.uml.edu"
+    connected_clients[self.client_address[0]] = client_name
+    print("Echoing message from: " + client_name + " "  + self.client_address[0])
+    client_num = client_num + 1
+
+def check_connected_clients():
+    # check which clients connect with server for the check
+    pass
 
 def tcp_listener(port):
     host = own_ip
