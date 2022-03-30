@@ -9,10 +9,11 @@ from multiprocessing import Process
 from socketserver import BaseRequestHandler, TCPServer
 import hashlib
 from datetime import datetime
+import ast
 
 own_ip = None
 server_ip = None
-
+ip_list = []
 
 def init_ip():
     global own_ip
@@ -46,10 +47,52 @@ def tcp_client(port, data, server_ip):
         finally:
             s.close()
         break
-    if not server_ip:
-        print("no server IP found")
-    print("Bytes Sent:     {data}")
+    print(f"Bytes Sent:     {data}")
     print(f"Bytes Received: {received.decode()}")
+
+class tcp_handler(BaseRequestHandler):
+    def handle(self):
+        self.data = self.request.recv(1024).strip()
+        ip = self.client_address[0]
+        print("Echoing message from: " + ip + " ")
+        print(self.data)
+        self.request.sendall("ACK from server".encode())
+        if b'PING' in self.data:
+            pass
+        elif b'PONG' in self.data:
+            pass
+        else:
+            get_ip_host_lists(self.data)
+            print_ips()
+
+def print_ips():
+    for i in ip_list:
+        print(i)
+
+def get_ip_host_lists(data):
+    global ip_list
+    clients_dict = ast.literal_eval(data.decode('utf-8'))
+    host_list = list(clients_dict.values())
+    ip_list = list(clients_dict.keys())
+    print_clients(host_list)
+
+def print_clients(host_list):
+    print("Current connections to the overlay network:")
+    for i in host_list:
+        print(i)
+
+def tcp_listener(port):
+    host = own_ip
+    cntx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    cntx.load_cert_chain('cert.pem', 'cert.pem')
+
+    server = TCPServer((host, port), tcp_handler)
+    server.socket = cntx.wrap_socket(server.socket, server_side=True)
+    try:
+        server.serve_forever()
+    except:
+        print("listener shutting down")
+        server.shutdown()
 
 #######################################
 #          Broadcast Example          #
@@ -83,11 +126,20 @@ def get_current_date_time():
     return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 def get_current_seconds():
-    return str(time.time()).split('.')[0]
+    return int(str(time.time()).split('.')[0])
 
 def print_server_ip():
     global server_ip
     server_ip = server_ip
+
+def retrieve_clients(tcp_port, server_ip):
+    msg = "retrieve"
+    tcp_client(tcp_port, msg, server_ip)
+
+def ping_clients(tcp_port, server_ip):
+    msg = "PING " + own_ip
+    for i in ip_list:
+        tcp_client(tcp_port, msg, server_ip)
 
 #######################################
 #               Driver                #
@@ -98,13 +150,42 @@ def communication_manager():
     init_ip()
 
     bcast_port = 1337
-    tcp_port = 9990
+    tcp_port = 9995
+    tcp_listen = 9990
 
     # broadcast to other users that you exist
     broadcast_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     broadcast_socket.bind(('', bcast_port))
     broadcast_listener(broadcast_socket)
+
+    procs = []
+    procs.append(Process(target=tcp_listener,
+                 name="tcp_listener_worker",
+                 args=(tcp_listen,)))
+
+    try:
+        for p in procs:
+            print("Starting: {}".format(p.name))
+            p.start()
+
+    except KeyboardInterrupt:
+        for p in procs:
+            print("Terminating: {}".format(p.name))
+            if p.is_alive():
+                p.terminate()
+                sleep(0.1)
+            if not p.is_alive():
+                print(p.join())
     
+    i = 0
+    while True:
+        if i % 10 == 0:
+            retrieve_clients(tcp_port, server_ip)
+        if i % 15 == 0:
+            ping_clients(tcp_port, server_ip)
+        sleep(1)
+        i = i + 1
+
     while True:
         tcp_client(tcp_port, input("Enter message to send: "), server_ip)
     

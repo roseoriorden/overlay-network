@@ -29,23 +29,16 @@ def init_ip():
 class tcp_handler(BaseRequestHandler):
     def handle(self):
         self.data = self.request.recv(1024).strip()
-        client_register(self)
+        client_name = client_register(self)
+        ip = self.client_address[0]
+        print("Echoing message from: " + client_name + " "  + ip)
         print(self.data)
         self.request.sendall("ACK from server".encode())
-
-def client_register(self):
-    # add new client to dictionary of clients
-    # connected_clients = { IP : host_name }
-    #count = len(connected_clients) + 1
-    global client_num
-    client_name = "client" + str(client_num) + ".c6610.uml.edu"
-    connected_clients[self.client_address[0]] = client_name
-    print("Echoing message from: " + client_name + " "  + self.client_address[0])
-    client_num = client_num + 1
-
-def check_connected_clients():
-    # check which clients connect with server for the check
-    pass
+        if self.data == b'retrieve':
+            print('received retrieve')
+            tcp_client(9990, str(connected_clients), ip)
+        if self.data == b'ping':
+            print('received ping')
 
 def tcp_listener(port):
     host = own_ip
@@ -60,6 +53,46 @@ def tcp_listener(port):
         print("listener shutting down")
         server.shutdown()
 
+def client_register(self):
+    # add new client to dictionary of clients
+    # connected_clients = { IP : host_name }
+    #count = len(connected_clients) + 1
+    global client_num
+    ip = self.client_address[0]
+    if ip in connected_clients.keys():
+        return connected_clients[ip]
+    client_name = "client" + str(client_num) + ".c6610.uml.edu"
+    connected_clients[ip] = client_name
+    client_num = client_num + 1
+    return client_name
+
+def check_connected_clients():
+    # check which clients connect with server for the check
+    pass
+
+
+def tcp_client(port, data, server_ip):
+    # Initialize a TCP client socket using SOCK_STREAM
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    cntx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    cntx.load_verify_locations('cert.pem')
+    cntx.load_cert_chain('cert.pem')
+
+    s = cntx.wrap_socket(s, server_hostname='test.server')
+    while server_ip:
+        try:
+            # Establish connection to TCP server and exchange data
+            s.connect((server_ip, port))
+            print('TCP connection established with ' + server_ip)
+            s.sendall(data.encode())
+            # Read data from the TCP server and close the connection
+            received = s.recv(1024)
+            break
+        finally:
+            s.close()
+        break
+    print(f"Bytes Sent:     {data}")
+    print(f"Bytes Received: {received.decode()}")
 
 #######################################
 #          Broadcast Example          #
@@ -107,7 +140,7 @@ def communication_manager():
     init_ip()
 
     bcast_port = 1337
-    tcp_listen = 9990
+    tcp_listen = 9995
 
     # broadcast to other users that you exist
     broadcast_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
