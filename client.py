@@ -32,7 +32,6 @@ def tcp_client(port, data, server_ip):
     cntx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     cntx.load_verify_locations('cert.pem')
     cntx.load_cert_chain('cert.pem')
-
     s = cntx.wrap_socket(s, server_hostname='test.server')
     print_server_ip()
     while server_ip:
