@@ -10,6 +10,7 @@ from socketserver import BaseRequestHandler, TCPServer
 import hashlib
 from datetime import datetime
 import ast
+import json
 
 own_ip = None
 server_ip = None
@@ -70,15 +71,27 @@ def print_ips():
 
 def get_ip_host_lists(data):
     global ip_list
-    clients_dict = ast.literal_eval(data.decode('utf-8'))
-    host_list = list(clients_dict.values())
-    ip_list = list(clients_dict.keys())
-    print_clients(host_list)
+    # convert bytes to string which is already dict
+    full_message = ast.literal_eval(data.decode('utf-8'))
+    #print('type of clients_string' + str(type(clients_string)))
+    # access dict which is value of outer dict ['msg']
+    clients_string = full_message['msg']
+    clients_dict = string_to_dict(clients_string)
+    #print(clients_dict)
+    #print(type(clients_dict))
+    del clients_dict[own_ip]
+    if len(clients_dict) == 0:
+        print("You are the only client connected to the network!")
+        return
+    else:
+        host_list = list(clients_dict.values())
+        ip_list = list(clients_dict.keys())
+        print_clients(host_list)
 
 def print_clients(host_list):
     print("Current connections to the overlay network:")
-    for i in host_list:
-        print(i)
+    for host in host_list:
+        print(host)
 
 def tcp_listener(port):
     host = own_ip
@@ -132,13 +145,33 @@ def print_server_ip():
     server_ip = server_ip
 
 def retrieve_clients(tcp_port, server_ip):
-    msg = "retrieve"
-    tcp_client(tcp_port, msg, server_ip)
+    #msg = "retrieve"
+    p = Packet("retrieve")
+    tcp_client(tcp_port, p.get_packet(), server_ip)
 
 def ping_clients(tcp_port, server_ip):
-    msg = "PING " + own_ip
-    for i in ip_list:
-        tcp_client(tcp_port, msg, server_ip)
+    #msg = "PING " + own_ip
+    p = Packet("ping")
+    for ip in ip_list:
+        if ip != own_ip:
+            print('pinging' + ip)
+            tcp_client(tcp_port, p.get_packet(), server_ip)
+
+def string_to_dict(string):
+    #print("string to be converted: " + string + str(type(string)))
+    d = json.loads(string)
+    return d
+
+######################################
+#              Message               #
+######################################
+class Packet:
+    def __init__(self, type):
+        p_contents = { "type" : type }
+                   #"msg" : msg }
+        self.packet = json.dumps(p_contents)
+    def get_packet(self):
+        return self.packet
 
 #######################################
 #               Driver                #
@@ -178,11 +211,13 @@ def communication_manager():
     
     i = 0
     while True:
-        if i % 10 == 0:
+        if i % 2 == 0:
+            print(str(i*5) + " call retrieve")
             retrieve_clients(tcp_port, server_ip)
-        if i % 15 == 0:
+        if i % 3 == 0:
+            print(str(i*5) + " call ping")
             ping_clients(tcp_port, server_ip)
-        sleep(1)
+        sleep(5)
         i = i + 1
 
     while True:

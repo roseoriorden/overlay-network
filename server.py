@@ -9,6 +9,7 @@ from multiprocessing import Process
 from socketserver import BaseRequestHandler, TCPServer
 import hashlib
 from datetime import datetime
+import json
 
 own_ip = None
 server_ip = None
@@ -34,9 +35,18 @@ class tcp_handler(BaseRequestHandler):
         print("Echoing message from: " + client_name + " "  + ip)
         print(self.data)
         self.request.sendall("ACK from server".encode())
-        if self.data == b'retrieve':
+        # convert bytes to string
+        b_to_s = self.data.decode('utf-8')
+        print("after decode: " + b_to_s + str(type(b_to_s)))
+        # convert string to json object/dict
+        rec = json.loads(self.data.decode('utf-8'))
+        #print(rec + str(type(rec)))
+        if rec['type'] == 'retrieve':#self.data == b'retrieve':
             print('received retrieve')
-            tcp_client(9990, str(connected_clients), ip)
+            p = Packet("connected", json.dumps(connected_clients))
+            print('dumps ' + str(json.dumps(connected_clients)))
+            packet = p.get_packet()
+            tcp_client(9990, packet, ip)
         if self.data == b'ping':
             print('received ping')
 
@@ -130,6 +140,24 @@ def print_server_ip():
     global server_ip
     server_ip = server_ip
     print("sever IP in helper func: " + str(server_ip))
+
+######################################
+#              Message               #
+######################################
+class Packet:
+    def __init__(self, p_type, msg):
+        p_contents = { "type" : p_type,
+                        "msg" : msg }
+        self.packet = json.dumps(p_contents)
+    def get_packet(self):
+        return self.packet
+    def get_type(self):
+        p_type = json.loads(self.get_packet())['type']
+        return p_type
+    def get_msg(self):
+        msg = json.loads(self.get_packet())['msg']
+        return msg
+
 
 #######################################
 #               Driver                #
