@@ -15,6 +15,7 @@ import json
 own_ip = None
 server_ip = None
 ip_list = []
+clients_dict = {}
 
 def init_ip():
     global own_ip
@@ -57,25 +58,34 @@ class tcp_handler(BaseRequestHandler):
         print("Echoing message from: " + ip + " ")
         print(self.data)
         self.request.sendall("ACK from server".encode())
-        if b'PING' in self.data:
+        full_message = ast.literal_eval(self.data.decode('utf-8'))
+        m_type = full_message['type']
+        print(m_type)
+        if m_type == 'ping':
+        #if b'PING' in self.data:
+            #print that received ping and respond with pong
+            print('received ping from ' + clients_dict[ip])
             pass
-        elif b'PONG' in self.data:
+        elif m_type == 'pong':
+        #elif b'PONG' in self.data:
+            # print that received pong
             pass
         else:
-            get_ip_host_lists(self.data)
+            get_ip_host_lists(full_message)
             print_ips()
 
 def print_ips():
     for i in ip_list:
         print(i)
 
-def get_ip_host_lists(data):
+def get_ip_host_lists(full_message):
     global ip_list
     # convert bytes to string which is already dict
-    full_message = ast.literal_eval(data.decode('utf-8'))
+    #full_message = ast.literal_eval(data.decode('utf-8'))
     #print('type of clients_string' + str(type(clients_string)))
     # access dict which is value of outer dict ['msg']
     clients_string = full_message['msg']
+    global clients_dict
     clients_dict = string_to_dict(clients_string)
     #print(clients_dict)
     #print(type(clients_dict))
@@ -149,13 +159,14 @@ def retrieve_clients(tcp_port, server_ip):
     p = Packet("retrieve")
     tcp_client(tcp_port, p.get_packet(), server_ip)
 
-def ping_clients(tcp_port, server_ip):
+def ping_clients(tcp_port):
     #msg = "PING " + own_ip
+    print('in ping clients func')
     p = Packet("ping")
-    for ip in ip_list:
-        if ip != own_ip:
+    if len(ip_list) != 0:
+        for ip in ip_list:
             print('pinging' + ip)
-            tcp_client(tcp_port, p.get_packet(), server_ip)
+            tcp_client(tcp_port, p.get_packet(), ip)
 
 def string_to_dict(string):
     #print("string to be converted: " + string + str(type(string)))
@@ -216,7 +227,7 @@ def communication_manager():
             retrieve_clients(tcp_port, server_ip)
         if i % 3 == 0:
             print(str(i*5) + " call ping")
-            ping_clients(tcp_port, server_ip)
+            ping_clients(tcp_port)
         sleep(5)
         i = i + 1
 
