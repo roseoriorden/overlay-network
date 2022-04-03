@@ -75,6 +75,7 @@ class tcp_handler(BaseRequestHandler):
             print_ips()
 
 def print_ips():
+    print('in print_ips, ip_list is set ' + str(len(ip_list)) + ' ' + str(ip_list))
     for i in ip_list:
         print(i)
 
@@ -95,6 +96,7 @@ def get_ip_host_lists(full_message):
         return
     else:
         host_list = list(clients_dict.values())
+        print('ip_list is set ' + str(len(ip_list)) + ' ' + str(ip_list))
         ip_list = list(clients_dict.keys())
         print_clients(host_list)
 
@@ -163,6 +165,7 @@ def ping_clients(tcp_port):
     #msg = "PING " + own_ip
     print('in ping clients func')
     p = Packet("ping")
+    print('length of ip_list: ' + str(len(ip_list)) + ' ' + str(ip_list))
     if len(ip_list) != 0:
         for ip in ip_list:
             print('pinging' + ip)
@@ -230,9 +233,6 @@ def communication_manager():
             ping_clients(tcp_port)
         sleep(5)
         i = i + 1
-
-    while True:
-        tcp_client(tcp_port, input("Enter message to send: "), server_ip)
     
 #######################################
 #               Main                  #

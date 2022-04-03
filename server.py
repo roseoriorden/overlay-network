@@ -15,6 +15,7 @@ own_ip = None
 server_ip = None
 connected_clients = {}
 client_num = 1
+last_connected = {}#k:'None' for k in l}
 
 def init_ip():
     global own_ip
@@ -29,12 +30,27 @@ def init_ip():
 #######################################
 class tcp_handler(BaseRequestHandler):
     def handle(self):
+        global connected_clients
         self.data = self.request.recv(1024).strip()
         client_name = client_register(self)
         ip = self.client_address[0]
         print("Echoing message from: " + client_name + " "  + ip)
         print(self.data)
         self.request.sendall("ACK from server".encode())
+        # deal with dictionary
+        last_connected[ip] = get_current_seconds()
+        delete = []
+        for ip in connected_clients:
+            client_name = connected_clients[ip]
+            if last_connected[ip] < get_current_seconds() - 16:
+                #del connected_clients[ip]
+                delete.append(ip)
+                print('deleting client ' + client_name)
+        for i in delete:
+            del connected_clients[i]
+            del last_connected[i]
+        print('current connections: ' + str(last_connected))
+        # decode message
         # convert bytes to string
         b_to_s = self.data.decode('utf-8')
         print("after decode: " + b_to_s + str(type(b_to_s)))
@@ -134,7 +150,7 @@ def get_current_date_time():
     return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 def get_current_seconds():
-    return str(time.time()).split('.')[0]
+    return int(str(time.time()).split('.')[0])
 
 def print_server_ip():
     global server_ip
