@@ -74,6 +74,20 @@ class tcp_handler(BaseRequestHandler):
             get_ip_host_lists(full_message)
             print_ips()
 
+def tcp_listener(port):
+    host = own_ip
+    cntx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    cntx.load_cert_chain('cert.pem', 'cert.pem')
+
+    server = TCPServer((host, port), tcp_handler)
+    server.socket = cntx.wrap_socket(server.socket, server_side=True)
+    try:
+        server.serve_forever()
+    except:
+        print("listener shutting down")
+        server.shutdown()
+
+
 def print_ips():
     print('in print_ips, ip_list is set ' + str(len(ip_list)) + ' ' + str(ip_list))
     for i in ip_list:
@@ -105,18 +119,6 @@ def print_clients(host_list):
     for host in host_list:
         print(host)
 
-def tcp_listener(port):
-    host = own_ip
-    cntx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    cntx.load_cert_chain('cert.pem', 'cert.pem')
-
-    server = TCPServer((host, port), tcp_handler)
-    server.socket = cntx.wrap_socket(server.socket, server_side=True)
-    try:
-        server.serve_forever()
-    except:
-        print("listener shutting down")
-        server.shutdown()
 
 #######################################
 #          Broadcast Example          #
