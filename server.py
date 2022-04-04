@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-import sys
 import ssl
 import socket
-import argparse
 from time import sleep
 import time
 from multiprocessing import Process
 from socketserver import BaseRequestHandler, TCPServer
 import hashlib
-from datetime import datetime
 import json
+import logging
+
+#logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 own_ip = None
 server_ip = None
 connected_clients = {}
 client_num = 1
-last_connected = {}#k:'None' for k in l}
+last_connected = {}
 
 def init_ip():
     global own_ip
@@ -34,8 +34,8 @@ class tcp_handler(BaseRequestHandler):
         self.data = self.request.recv(1024).strip()
         client_name = client_register(self)
         ip = self.client_address[0]
-        print("Echoing message from: " + client_name + " "  + ip)
-        print(self.data)
+        logging.info("Echoing message from: " + client_name + " "  + ip)
+        logging.info(self.data)
         self.request.sendall("ACK from server".encode())
         # deal with dictionary
         last_connected[ip] = get_current_seconds()
@@ -45,26 +45,33 @@ class tcp_handler(BaseRequestHandler):
             if last_connected[ip] < get_current_seconds() - 16:
                 #del connected_clients[ip]
                 delete.append(ip)
-                print('deleting client ' + client_name)
+                print('Client ' + client_name + ' has disconnected. Removing...')
+                logging.info('deleting client ' + client_name)
         for i in delete:
             del connected_clients[i]
             del last_connected[i]
-        print('current connections: ' + str(last_connected))
+        logging.info('current connections: ' + str(last_connected))
         # decode message
         # convert bytes to string
         b_to_s = self.data.decode('utf-8')
-        print("after decode: " + b_to_s + str(type(b_to_s)))
+        logging.info("after decode: " + b_to_s + str(type(b_to_s)))
         # convert string to json object/dict
         rec = json.loads(self.data.decode('utf-8'))
         #print(rec + str(type(rec)))
         if rec['type'] == 'retrieve':#self.data == b'retrieve':
-            print('received retrieve')
+            logging.info('received retrieve from ' + ip)
+            print('Received retrieve clients request from ' + connected_clients[ip] +
+                    '\nResponding with list of connected clients...')
+            for client in connected_clients.values():
+                print(client)
             p = Packet("connected", json.dumps(connected_clients))
-            print('dumps ' + str(json.dumps(connected_clients)))
+            #print('dumps ' + str(json.dumps(connected_clients)))
             packet = p.get_packet()
             tcp_client(9990, packet, ip)
         if self.data == b'ping':
-            print('received ping')
+            logging.info('received ping')
+        else:
+            logging.info('received non-Packet format data')
 
 def tcp_listener(port):
     host = own_ip
@@ -76,7 +83,7 @@ def tcp_listener(port):
     try:
         server.serve_forever()
     except:
-        print("listener shutting down")
+        logging.info("listener shutting down")
         server.shutdown()
 
 def client_register(self):
@@ -90,6 +97,7 @@ def client_register(self):
     client_name = "client" + str(client_num) + ".c6610.uml.edu"
     connected_clients[ip] = client_name
     client_num = client_num + 1
+    print('A new client has connected: ' + client_name)
     return client_name
 
 def check_connected_clients():
@@ -109,7 +117,7 @@ def tcp_client(port, data, server_ip):
         try:
             # Establish connection to TCP server and exchange data
             s.connect((server_ip, port))
-            print('TCP connection established with ' + server_ip)
+            logging.info('TCP connection established with ' + server_ip)
             s.sendall(data.encode())
             # Read data from the TCP server and close the connection
             received = s.recv(1024)
@@ -117,8 +125,8 @@ def tcp_client(port, data, server_ip):
         finally:
             s.close()
         break
-    print(f"Bytes Sent:     {data}")
-    print(f"Bytes Received: {received.decode()}")
+    logging.info(f"Bytes Sent:     {data}")
+    logging.info(f"Bytes Received: {received.decode()}")
 
 #######################################
 #          Broadcast Example          #
@@ -126,7 +134,7 @@ def tcp_client(port, data, server_ip):
 def broadcast_sender(port):
     count = 0
     hash = get_bcast_hash()
-    print("beginning to send broadcasts")
+    print("Broadcasting to the network...")
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -146,16 +154,13 @@ def get_bcast_hash():
     hash = hashlib.sha256(bcast_string.encode('utf-8')).hexdigest()
     return hash
 
-def get_current_date_time():
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
 def get_current_seconds():
     return int(str(time.time()).split('.')[0])
 
 def print_server_ip():
     global server_ip
     server_ip = server_ip
-    print("sever IP in helper func: " + str(server_ip))
+    logging.info("sever IP in helper func: " + str(server_ip))
 
 ######################################
 #              Message               #
@@ -200,17 +205,17 @@ def communication_manager():
 
     try:
         for p in procs:
-            print("Starting: {}".format(p.name))
+            logging.info("Starting: {}".format(p.name))
             p.start()
 
     except KeyboardInterrupt:
         for p in procs:
-            print("Terminating: {}".format(p.name))
+            logging.info("Terminating: {}".format(p.name))
             if p.is_alive():
                 p.terminate()
                 sleep(0.1)
             if not p.is_alive():
-                print(p.join())
+                logging.info(p.join())
 
 
 #######################################

@@ -22,3 +22,4 @@ Client(s):
 ```
 $ ./client.py
 ```
+Un-comment the logging config line at the top of both files to have additional logging printed to stdout.

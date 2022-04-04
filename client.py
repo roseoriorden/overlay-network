@@ -1,28 +1,25 @@
 #!/usr/bin/env python3
-import sys
 import ssl
 import socket
-import argparse
 from time import sleep
 import time
 from multiprocessing import Process, Manager
 from socketserver import BaseRequestHandler, TCPServer
 import hashlib
-from datetime import datetime
 import ast
 import json
+import logging
 
 manager = Manager()
 shared_list = manager.list()
-#shared_list.append('a'*3)
-#print('shared list:')
-print(shared_list)
+#logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 own_ip = None
 server_ip = None
 ip_list = []
 clients_dict = {}
 tcp_listen = 9990
+tcp_port = 9995
 
 def init_ip():
     global own_ip
@@ -47,7 +44,7 @@ def tcp_client(port, data, server_ip):
         try:
             # Establish connection to TCP server and exchange data
             s.connect((server_ip, port))
-            print('TCP connection established with ' + server_ip)
+            logging.info('TCP connection established with ' + server_ip)
             s.sendall(data.encode())
             # Read data from the TCP server and close the connection
             received = s.recv(1024)
@@ -55,42 +52,48 @@ def tcp_client(port, data, server_ip):
         finally:
             s.close()
         break
-    print(f"Bytes Sent:     {data}")
-    print(f"Bytes Received: {received.decode()}")
+    logging.info(f"Bytes Sent:     {data}")
+    logging.info(f"Bytes Received: {received.decode()}")
 
 class tcp_handler(BaseRequestHandler):
     def handle(self):
-        print('in tcp handler: ' + str(shared_list))
-        #shared_list.append('b')
-        #print('just appended a b to the list: ' + str(shared_list))
         self.data = self.request.recv(1024).strip()
         ip = self.client_address[0]
-        print("Echoing message from: " + ip + " ")
-        print(self.data)
+        logging.info("Echoing message from: " + ip + " ")
+        logging.info(self.data)
         self.request.sendall("ACK from server".encode())
+        # decode message received
         full_message = ast.literal_eval(self.data.decode('utf-8'))
         m_type = full_message['type']
-        print(m_type)
+        logging.info(m_type)
+        # if src ip not already in ip list, add it
         if ip != server_ip and ip not in shared_list:
-            print('adding ' + ip + ' to shared list')
+            logging.info('adding ' + ip + ' to shared list')
             shared_list.append(ip)
+        # if received ping, respond with pong
         if m_type == 'ping':
-        #if b'PING' in self.data:
-            #print that received ping and respond with pong
-            print('Received ping from ' + clients_dict[ip] + ' ... Replying with pong')
-            p = Packet("ping")
-            tcp_client(tcp_port, p.get_packet(), ip)
+            if len(clients_dict) > 0 and ip in clients_dict:
+                print('Received ping from ' + clients_dict[ip] + ' ... Replying with pong')
+            else:
+                print('Received ping from ' + ip + ' ... Replying with pong')
+            p = Packet("pong")
+            tcp_client(tcp_listen, p.get_packet(), ip)
+        # if received pong, just print
         elif m_type == 'pong':
-        #elif b'PONG' in self.data:
-            # print that received pong
-            print('Received pong from ' + clients_dict[ip])
-        else:
+            if len(clients_dict) > 0 and ip in clients_dict:
+                print('Received pong from ' + clients_dict[ip])
+            else:
+                print('Received pong from ' + ip)
+        # else if received list of clients, update list
+        elif m_type == 'connected':
             get_ip_host_lists(full_message)
             shared_list[:] = []
             for ip in ip_list:
                 shared_list.append(ip)
-                print('added ' + ip + ' to the list')
-            print_ips()
+                logging.info('added ' + ip + ' to the list')
+            #print_ips()
+        else:
+            logging.info('received non-Packet format data')
 
 def tcp_listener(port):
     host = own_ip
@@ -102,26 +105,23 @@ def tcp_listener(port):
     try:
         server.serve_forever()
     except:
-        print("listener shutting down")
+        logging.info("listener shutting down")
         server.shutdown()
 
 
 def print_ips():
-    print('in print_ips, shared_list is set ' + str(len(shared_list)) + ' ' + str(shared_list))
+    logging.info('in print_ips, shared_list is set ' + 
+            str(len(shared_list)) + ' ' + str(shared_list))
     for i in shared_list:
         print(i)
 
 def get_ip_host_lists(full_message):
     global ip_list
     # convert bytes to string which is already dict
-    #full_message = ast.literal_eval(data.decode('utf-8'))
-    #print('type of clients_string' + str(type(clients_string)))
     # access dict which is value of outer dict ['msg']
     clients_string = full_message['msg']
     global clients_dict
     clients_dict = string_to_dict(clients_string)
-    #print(clients_dict)
-    #print(type(clients_dict))
     if own_ip in clients_dict:
         del clients_dict[own_ip]
     if len(clients_dict) == 0:
@@ -129,7 +129,7 @@ def get_ip_host_lists(full_message):
         return
     else:
         host_list = list(clients_dict.values())
-        print('ip_list is set ' + str(len(ip_list)) + ' ' + str(ip_list))
+        logging.info('ip_list is set ' + str(len(ip_list)) + ' ' + str(ip_list))
         ip_list = list(clients_dict.keys())
         print_clients(host_list)
 
@@ -150,10 +150,9 @@ def broadcast_listener(socket):
             data, addr = socket.recvfrom(512)
             if addr[0] != own_ip:
                 string_rec = data.decode("utf-8")
-                #substrings_rec = string_rec.split()
                 if string_rec == hash:
                     server_ip = addr[0]
-                    print("Broadcast received from " + server_ip)
+                    print("Server discovered at " + server_ip)
                     return
     except KeyboardInterrupt:
         pass
@@ -166,9 +165,6 @@ def get_bcast_hash():
     bcast_string = "overlay-network-broadcast"
     hash = hashlib.sha256(bcast_string.encode('utf-8')).hexdigest()
     return hash
-
-def get_current_date_time():
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 def get_current_seconds():
     return int(str(time.time()).split('.')[0])
@@ -184,17 +180,18 @@ def retrieve_clients(tcp_port, server_ip):
 
 def ping_clients(tcp_port):
     #msg = "PING " + own_ip
-    print(shared_list)
-    print('in ping clients func')
+    logging.info(shared_list)
     p = Packet("ping")
-    print('length of shared_list: ' + str(len(shared_list)) + ' ' + str(shared_list))
+    logging.info('length of shared_list: ' + str(len(shared_list)) + ' ' + str(shared_list))
     if len(shared_list) != 0:
         for ip in shared_list:
-            print('pinging' + ip)
+            if len(clients_dict) > 0 and ip in clients_dict:
+                print('Pinging ' + clients_dict[ip])
+            else:
+                print('Pinging ' + ip)
             tcp_client(tcp_port, p.get_packet(), ip)
 
 def string_to_dict(string):
-    #print("string to be converted: " + string + str(type(string)))
     d = json.loads(string)
     return d
 
@@ -218,8 +215,8 @@ def communication_manager():
     init_ip()
 
     bcast_port = 1337
-    tcp_port = 9995
-    tcp_listen = 9990
+    # use tcp_port to connect with server, bc server listens on 9995
+    # clients are listening on 9000, use tcp_listen to connect with other clients
 
     # broadcast to other users that you exist
     broadcast_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -233,27 +230,28 @@ def communication_manager():
 
     try:
         for p in procs:
-            print("Starting: {}".format(p.name))
+            logging.info("Starting: {}".format(p.name))
             p.start()
 
     except KeyboardInterrupt:
         for p in procs:
-            print("Terminating: {}".format(p.name))
+            logging.info("Terminating: {}".format(p.name))
             if p.is_alive():
                 p.terminate()
                 sleep(0.1)
             if not p.is_alive():
-                print(p.join())
+                logging.info(p.join())
     
     i = 0
     while True:
         if i % 2 == 0:
-            print(str(i*5) + " call retrieve")
+            print('Retrieving current connections from server...')
             retrieve_clients(tcp_port, server_ip)
         if i % 3 == 0:
-            print(str(i*5) + " call ping")
-            ping_clients(tcp_port)
-            print('shared list in main: ' + str(shared_list))
+            if len(shared_list) > 0:
+                print('Pinging connected clients...')
+                ping_clients(tcp_listen)
+            logging.info('shared list in main: ' + str(shared_list))
         sleep(5)
         i = i + 1
     
