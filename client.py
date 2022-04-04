@@ -5,17 +5,24 @@ import socket
 import argparse
 from time import sleep
 import time
-from multiprocessing import Process
+from multiprocessing import Process, Manager
 from socketserver import BaseRequestHandler, TCPServer
 import hashlib
 from datetime import datetime
 import ast
 import json
 
+manager = Manager()
+shared_list = manager.list()
+#shared_list.append('a'*3)
+#print('shared list:')
+print(shared_list)
+
 own_ip = None
 server_ip = None
 ip_list = []
 clients_dict = {}
+tcp_listen = 9990
 
 def init_ip():
     global own_ip
@@ -53,6 +60,9 @@ def tcp_client(port, data, server_ip):
 
 class tcp_handler(BaseRequestHandler):
     def handle(self):
+        print('in tcp handler: ' + str(shared_list))
+        #shared_list.append('b')
+        #print('just appended a b to the list: ' + str(shared_list))
         self.data = self.request.recv(1024).strip()
         ip = self.client_address[0]
         print("Echoing message from: " + ip + " ")
@@ -61,17 +71,25 @@ class tcp_handler(BaseRequestHandler):
         full_message = ast.literal_eval(self.data.decode('utf-8'))
         m_type = full_message['type']
         print(m_type)
+        if ip != server_ip and ip not in shared_list:
+            print('adding ' + ip + ' to shared list')
+            shared_list.append(ip)
         if m_type == 'ping':
         #if b'PING' in self.data:
             #print that received ping and respond with pong
-            print('received ping from ' + clients_dict[ip])
-            pass
+            print('Received ping from ' + clients_dict[ip] + ' ... Replying with pong')
+            p = Packet("ping")
+            tcp_client(tcp_port, p.get_packet(), ip)
         elif m_type == 'pong':
         #elif b'PONG' in self.data:
             # print that received pong
-            pass
+            print('Received pong from ' + clients_dict[ip])
         else:
             get_ip_host_lists(full_message)
+            shared_list[:] = []
+            for ip in ip_list:
+                shared_list.append(ip)
+                print('added ' + ip + ' to the list')
             print_ips()
 
 def tcp_listener(port):
@@ -89,8 +107,8 @@ def tcp_listener(port):
 
 
 def print_ips():
-    print('in print_ips, ip_list is set ' + str(len(ip_list)) + ' ' + str(ip_list))
-    for i in ip_list:
+    print('in print_ips, shared_list is set ' + str(len(shared_list)) + ' ' + str(shared_list))
+    for i in shared_list:
         print(i)
 
 def get_ip_host_lists(full_message):
@@ -104,7 +122,8 @@ def get_ip_host_lists(full_message):
     clients_dict = string_to_dict(clients_string)
     #print(clients_dict)
     #print(type(clients_dict))
-    del clients_dict[own_ip]
+    if own_ip in clients_dict:
+        del clients_dict[own_ip]
     if len(clients_dict) == 0:
         print("You are the only client connected to the network!")
         return
@@ -165,11 +184,12 @@ def retrieve_clients(tcp_port, server_ip):
 
 def ping_clients(tcp_port):
     #msg = "PING " + own_ip
+    print(shared_list)
     print('in ping clients func')
     p = Packet("ping")
-    print('length of ip_list: ' + str(len(ip_list)) + ' ' + str(ip_list))
-    if len(ip_list) != 0:
-        for ip in ip_list:
+    print('length of shared_list: ' + str(len(shared_list)) + ' ' + str(shared_list))
+    if len(shared_list) != 0:
+        for ip in shared_list:
             print('pinging' + ip)
             tcp_client(tcp_port, p.get_packet(), ip)
 
@@ -233,6 +253,7 @@ def communication_manager():
         if i % 3 == 0:
             print(str(i*5) + " call ping")
             ping_clients(tcp_port)
+            print('shared list in main: ' + str(shared_list))
         sleep(5)
         i = i + 1
     
